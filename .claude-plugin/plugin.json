@@ -1,0 +1,9 @@
+{
+  "name": "claude-worklog",
+  "version": "0.1.0",
+  "description": "Logs every Claude Code session into one readable file per day: your messages, plus the reports, tickets, PRs and kubectl actions from the replies.",
+  "author": {
+    "name": "Sanchit Arora",
+    "url": "https://github.com/sanchitarora802"
+  }
+}
