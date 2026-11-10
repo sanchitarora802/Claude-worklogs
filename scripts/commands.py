@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # The plugin's commands other than logging itself.
 #
-#   commands.py check            SessionStart hook: warn when no log folder is set or it's missing.
-#                                Must stay fast and silent when all is well, so it never calls the CLI.
+#   commands.py check            SessionStart hook: warn when no log folder is set or it's missing;
+#                                when it's fine, start a background catch-up of unlogged chats.
+#                                Must stay fast and silent, so it never calls the CLI or waits.
 #   commands.py setup [PATH]     /worklog:setup. Without PATH (on a Mac): shows a note on
 #                                choosing a folder (with a Help button that opens the README), then
 #                                the Finder folder picker. Saves the choice, checks it's writable,
@@ -135,10 +136,18 @@ def day(args):
         print(path.read_text(encoding="utf-8"))
 
 
+def catch_up():
+    # Detached so the new chat never waits; the lock in worklog.py keeps it from racing a hook.
+    subprocess.Popen([sys.executable, str(Path(__file__).resolve().parent / "worklog.py"), "--catchup"],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True)
+
+
 def check(_args):
     # SessionStart: silent when fine; otherwise a one-line warning shown to the user.
     root = config.log_root()
     if root and root.is_dir():
+        catch_up()
         return
     if root:
         message = (f"worklog: log folder {root} is missing (sync drive not mounted?), so this "

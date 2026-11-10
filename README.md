@@ -76,7 +76,7 @@ scripts/
 
 | Moment | Hook | What runs |
 |---|---|---|
-| A chat starts | `SessionStart` | `commands.py check`: silent when all is well; otherwise warns that no folder is set or the folder is missing. |
+| A chat starts | `SessionStart` | `commands.py check`: warns if no folder is set or the folder is missing. When all is well it's silent, and starts a background catch-up of any chat with unlogged lines. |
 | After every Claude reply | `Stop` (async) | `worklog.py` logs what's new in this chat. It runs in the background, so replies never wait for it. |
 | A chat ends | `SessionEnd` | `worklog.py` makes a final pass for anything the last reply's run missed. |
 
@@ -150,8 +150,13 @@ explain the result.
   and the read offset doesn't move, so it catches up once the folder is back.
 - **No folder set:** nothing is logged and nothing is marked as read, so choosing a folder later
   still picks up every chat.
-- **Two runs at once:** a file lock lets only one write at a time.
-- **Re-runs** never duplicate entries, because a run only reads past the saved offset.
+- **Missed replies:** stopping a reply with Esc skips that reply's hook, and a force-closed window
+  skips the end-of-chat pass. The catch-up at the start of the next chat, in any repo, logs those
+  lines. It runs in the background, so the new chat doesn't wait.
+- **Two runs at once:** a file lock lets only one write at a time, so parallel chats in several
+  editors don't clash.
+- **Re-runs** never duplicate entries: a run only reads past the saved offset, and a chat that has
+  to be re-read from the start reuses its existing entries.
 - **Uninstalling** removes the data folder. Your day files stay where they are.
 
 ### Limits
@@ -170,5 +175,6 @@ Run by hand:
 
 ```sh
 python3 scripts/worklog.py --backfill   # log every chat not logged yet (safe to re-run)
+python3 scripts/worklog.py --catchup    # log only chats with unlogged lines
 python3 scripts/worklog.py --rebuild    # forget what was parsed and rebuild every day file
 ```

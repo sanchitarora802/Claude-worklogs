@@ -22,6 +22,7 @@
 #   worklog.py               hook mode, reads the hook JSON on stdin
 #   worklog.py --backfill    log every transcript under ~/.claude/projects (safe to re-run)
 #   worklog.py --rebuild     forget everything parsed so far, then backfill from scratch
+#   worklog.py --catchup     log only chats with unlogged lines (run in the background when a chat starts)
 #
 # Optional env: WORKLOG_JIRA_PREFIXES="BUZZ,OPS" limits ticket detection to those project keys.
 import fcntl
@@ -276,9 +277,14 @@ class Days:
         return self.cache[day]
 
     def add(self, turn):
+        # A chat re-read from the start (its file was rewritten) reuses its entries, never duplicates.
         turns = self.turns(turn["day"])
-        turns.append(turn)
         self.dirty.add(turn["day"])
+        for i, old in enumerate(turns):
+            if (old["session"], old["time"], old["you"]) == (turn["session"], turn["time"], turn["you"]):
+                turns[i] = turn
+                return [turn["day"], i]
+        turns.append(turn)
         return [turn["day"], len(turns) - 1]
 
     def get(self, ref):
@@ -413,6 +419,12 @@ def load_offsets():
         return {}
 
 
+def unread(transcript, offsets):
+    # True when a chat has lines not logged yet: an Esc-stopped reply, or a window force-closed
+    # before its end-of-chat pass ran.
+    return transcript.stat().st_size != offsets.get(str(transcript), {}).get("offset", 0)
+
+
 def run(log_root, mode="hook", transcript=None):
     use_folders(log_root)
     with open(LOCK_FILE, "w") as lock:
@@ -421,8 +433,10 @@ def run(log_root, mode="hook", transcript=None):
             shutil.rmtree(DAYS_DIR, ignore_errors=True)
             OFFSETS_FILE.unlink(missing_ok=True)
         offsets, days = load_offsets(), Days()
-        if mode in ("backfill", "rebuild"):
+        if mode in ("backfill", "rebuild", "catchup"):
             files = sorted(PROJECTS_DIR.glob("*/*.jsonl"), key=lambda p: p.stat().st_mtime)
+            if mode == "catchup":
+                files = [f for f in files if unread(f, offsets)]
         else:
             files = [transcript]
         for path in files:
@@ -433,13 +447,18 @@ def run(log_root, mode="hook", transcript=None):
 
 
 def main():
-    mode = "rebuild" if "--rebuild" in sys.argv else "backfill" if "--backfill" in sys.argv else "hook"
-    root = config.log_root(ask_cli=mode != "hook")
+    flags = {"--rebuild": "rebuild", "--backfill": "backfill", "--catchup": "catchup"}
+    mode = next((m for f, m in flags.items() if f in sys.argv), "hook")
+    root = config.log_root(ask_cli=mode in ("rebuild", "backfill"))
     if mode == "hook":
         path = json.load(sys.stdin).get("transcript_path")
         # A missing folder (sync drive not mounted) is skipped, not created; it catches up later.
         if root and root.is_dir() and path and Path(path).is_file():
             run(root, "hook", Path(path))
+        return
+    if mode == "catchup":
+        if root and root.is_dir():
+            run(root, mode)
         return
     if not root:
         sys.exit("No log folder set. Run /worklog:setup first.")
