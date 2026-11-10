@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="worklog: your Claude Code day, in one readable file" width="100%">
+  <img src="assets/banner.svg" alt="Worklog: your Claude Code day, in one readable file" width="100%">
 </p>
 
 <p align="center">
@@ -11,7 +11,7 @@
   <img alt="No dependencies" src="https://img.shields.io/badge/dependencies-0-6366f1">
 </p>
 
-# 📒 worklog
+# 📒 Worklog
 
 A Claude Code plugin that keeps **one readable log file per day** of everything you do with Claude
 Code, across all your projects and computers. ✨
@@ -111,13 +111,9 @@ on its own once the folder is back.
 
 ## ⚙️ How it works
 
-```mermaid
-flowchart LR
-  A[💬 You chat] --> B[🤖 Claude replies]
-  B --> C[🪝 Hook runs]
-  C --> D[🔍 Reads new lines only]
-  D --> E[📒 Updates today's file]
-```
+<p align="center">
+  <img src="assets/flow.svg" alt="You chat, Claude replies, a hook runs, it reads new lines only, and updates the log" width="100%">
+</p>
 
 ## 🛡️ Safety
 
