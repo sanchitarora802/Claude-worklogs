@@ -14,14 +14,17 @@ import glob
 import json
 import os
 import shutil
-import socket
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import platforms  # noqa: E402
 
 PLUGIN_ID = "worklog@worklog"
 FOLDER_NOTE = (
-    "Pick a folder that syncs between your own Macs (iCloud Drive, Google Drive, Dropbox), so every "
-    "Mac's log ends up in one place. Each Mac writes to its own subfolder inside it.\n\n"
+    "Pick a folder that syncs between your own computers (iCloud Drive, Google Drive, Dropbox, "
+    "OneDrive), so every computer's log ends up in one place. Each writes to its own subfolder inside it.\n\n"
     "Don't pick a folder shared with other people: logs hold your full messages, ticket numbers "
     "and the prod commands that ran."
 )
@@ -29,11 +32,7 @@ HELP_URL = "https://github.com/sanchitarora802/Claude-worklogs#choosing-a-log-fo
 
 
 def machine_name():
-    try:
-        return subprocess.run(["scutil", "--get", "LocalHostName"], capture_output=True, text=True,
-                              timeout=5).stdout.strip() or socket.gethostname()
-    except (OSError, subprocess.SubprocessError):
-        return socket.gethostname()
+    return platforms.machine_name()
 
 
 def data_dir():
@@ -44,16 +43,22 @@ def data_dir():
 
 
 def claude_cli():
-    found = shutil.which("claude")
-    if found:
-        return found
+    for name in platforms.cli_names():
+        found = shutil.which(name)
+        if found:
+            return found
     for editor in (".vscode", ".cursor", ".vscode-insiders"):
-        paths = glob.glob(str(Path.home() / editor / "extensions" / "anthropic.claude-code-*"
-                              / "resources" / "native-binary" / "claude"))
-        if paths:
-            return sorted(paths, key=lambda p: [int(x) if x.isdigit() else x
-                                                for x in p.replace("-", ".").split(".")])[-1]
+        for name in platforms.cli_names():
+            paths = glob.glob(str(Path.home() / editor / "extensions" / "anthropic.claude-code-*"
+                                  / "resources" / "native-binary" / name))
+            if paths:
+                return sorted(paths, key=version_key)[-1]
     return None
+
+
+def version_key(path):
+    # Sorts extension folders like anthropic.claude-code-2.1.319-darwin-arm64 by version number.
+    return [int(x) if x.isdigit() else x for x in path.replace("-", ".").split(".")]
 
 
 def saved_option():

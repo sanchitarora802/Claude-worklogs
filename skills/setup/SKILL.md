@@ -1,14 +1,14 @@
 ---
-description: Choose the folder where worklog saves your daily work logs (opens a Finder folder picker), then log every past chat into it.
+description: Choose the folder where worklog saves your daily work logs (opens a folder picker), then log every past chat into it.
 argument-hint: "[folder path, optional]"
 disable-model-invocation: true
 ---
 
-Run this command with the Bash tool and wait for it. On a Mac it opens a note about choosing a
-folder, then a Finder folder picker. The user is clicking through it, so allow up to 5 minutes.
+Run this command with the Bash tool and wait for it. It opens a note about choosing a
+folder, then a folder picker (Finder on macOS, the Windows folder dialog, or zenity/kdialog on Linux). The user is clicking through it, so allow up to 5 minutes.
 
 ```sh
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/commands.py" setup $ARGUMENTS
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/run.sh" commands.py setup $ARGUMENTS
 ```
 
 Then tell the user, in a few lines:

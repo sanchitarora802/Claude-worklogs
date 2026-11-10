@@ -25,7 +25,6 @@
 #   worklog.py --catchup     log only chats with unlogged lines (run in the background when a chat starts)
 #
 # Optional env: WORKLOG_JIRA_PREFIXES="BUZZ,OPS" limits ticket detection to those project keys.
-import fcntl
 import json
 import os
 import re
@@ -37,6 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import config  # noqa: E402
+import platforms  # noqa: E402
 
 MACHINE = config.machine_name()
 LOG_DIR = DAYS_DIR = OFFSETS_FILE = LOCK_FILE = None
@@ -68,6 +68,7 @@ TICKET = re.compile(r"\b(?:%s)-\d{1,6}\b" % "|".join(map(re.escape, _prefixes)))
 NOT_TICKETS = re.compile(r"^(UTF|SHA|ISO|RFC|GPT|AES|HTTP|TLS|SSL|MD|ES|IPV|X|PR)\d*-")
 PR_URL = re.compile(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)")
 PR_REF = re.compile(r"\b(?:PR|pull request)\s*#(\d+)", re.I)
+INTERRUPTED = re.compile(r"^\[Request interrupted by user( for tool use)?\]")
 LOG_LINE = re.compile(r"^\s*(?:[-*]\s*)?log:\s*(.+)$", re.I | re.M)
 KUBE_FLAGS_WITH_VALUE = {"-n", "--namespace", "--context", "-c", "--container", "-l", "--selector",
                          "-o", "--output", "--tail", "--since", "-f", "--filename", "--kubeconfig"}
@@ -96,6 +97,22 @@ def clean_user(text):
     text = PASTE.sub(lambda m: paste_summary(m.group(1)), text)
     text = FENCE.sub(lambda m: paste_summary(m.group(1)) if m.group(1).count("\n") > 4 else m.group(0), text)
     return text.strip()
+
+
+def interruption(entry):
+    # "[Request interrupted by user]" is what Claude Code records when you press Esc or stop a reply.
+    # Returns "reply" or "tool" (stopped while a command was running), or None.
+    if entry.get("type") != "user":
+        return None
+    content = entry.get("message", {}).get("content")
+    texts = [content] if isinstance(content, str) else [
+        b.get("text", "") if b.get("type") == "text" else str(b.get("content", "")) for b in content or []
+        if isinstance(b, dict)]
+    for text in texts:
+        match = INTERRUPTED.match(str(text).strip())
+        if match:
+            return "tool" if match.group(1) else "reply"
+    return None
 
 
 def human_text(entry):
@@ -324,6 +341,11 @@ def process(transcript, offsets, days):
                 continue
             if entry.get("isSidechain"):
                 continue
+            stopped = interruption(entry)
+            if stopped:
+                if current is not None:
+                    current["stopped"] = stopped
+                continue
             you = human_text(entry)
             if you:
                 current = new_turn(entry, transcript, you)
@@ -377,8 +399,10 @@ def summary(turns):
         line = f"kubectl: {len(kube)} commands (" + ", ".join(f"{e} {n}" for e, n in envs.items()) + ")"
         points.append(line + (f", {writes} changing something" if writes else ", all read-only"))
     notes = [n for t in turns for n in t["notes"]]
-    if notes:
-        points.append(f"Notes: {len(notes)} `log:` entries")
+    stopped = sum(1 for t in turns if t.get("stopped"))
+    extras = ([f"{len(notes)} `log:` notes"] if notes else []) + ([f"{stopped} " + ("reply" if stopped == 1 else "replies") + " stopped by you"] if stopped else [])
+    if extras:
+        points.append("Also: " + ", ".join(extras))
     return points[:5]
 
 
@@ -392,6 +416,8 @@ def render(day, turns):
             head += f" · {t['branch']}"
         out += ["", head + f"  <sub>{t['session']}</sub>", "", f"**You:** {t['you']}"]
         facts = []
+        if t.get("stopped"):
+            facts.append("⏹ **Stopped by you**" + (" while a command was running" if t["stopped"] == "tool" else ""))
         if t["tickets"]:
             facts.append("Tickets: " + ", ".join(t["tickets"]))
         if t["prs"]:
@@ -427,8 +453,7 @@ def unread(transcript, offsets):
 
 def run(log_root, mode="hook", transcript=None):
     use_folders(log_root)
-    with open(LOCK_FILE, "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with platforms.locked(LOCK_FILE):
         if mode == "rebuild":
             shutil.rmtree(DAYS_DIR, ignore_errors=True)
             OFFSETS_FILE.unlink(missing_ok=True)

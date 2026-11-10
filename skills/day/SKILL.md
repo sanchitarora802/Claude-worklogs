@@ -1,5 +1,5 @@
 ---
-description: Summarise what was done with Claude Code on a given date, from the worklog daily logs of every Mac. Use when the user asks what they worked on, or what was done, on a date.
+description: Summarise what was done with Claude Code on a given date, from the worklog daily logs of every computer. Use when the user asks what they worked on, or what was done, on a date.
 argument-hint: "[YYYY-MM-DD | today | yesterday]"
 ---
 
@@ -7,7 +7,7 @@ Work out the date the user means and write it as YYYY-MM-DD (use `today` or `yes
 what they said; resolve weekday names like "last Friday" to a date yourself). Then run:
 
 ```sh
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/commands.py" day <date>
+sh "${CLAUDE_PLUGIN_ROOT}/scripts/run.sh" commands.py day <date>
 ```
 
 From the output, write a summary of that day for the user:

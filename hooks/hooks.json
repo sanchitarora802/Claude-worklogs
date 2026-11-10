@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/commands.py\" check",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/run.sh\" commands.py check",
             "timeout": 10
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/worklog.py\"",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/run.sh\" worklog.py",
             "timeout": 60,
             "async": true
           }
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/worklog.py\""
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/run.sh\" worklog.py"
           }
         ]
       }
