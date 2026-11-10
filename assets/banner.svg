@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" width="1200" height="360" role="img" aria-label="worklog: your Claude Code day, in one readable file">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e1b4b"/>
+      <stop offset="0.55" stop-color="#312e81"/>
+      <stop offset="1" stop-color="#0f766e"/>
+    </linearGradient>
+    <linearGradient id="cover" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fde68a"/>
+      <stop offset="1" stop-color="#fbbf24"/>
+    </linearGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f1f5f9"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="360" rx="28" fill="url(#bg)"/>
+
+  <!-- background sparkles and dots -->
+  <g fill="#ffffff" opacity="0.18">
+    <circle cx="80" cy="60" r="3"/><circle cx="1120" cy="70" r="4"/><circle cx="1040" cy="300" r="3"/>
+    <circle cx="640" cy="40" r="2.5"/><circle cx="560" cy="320" r="3"/><circle cx="1150" cy="190" r="2.5"/>
+    <circle cx="40" cy="250" r="2.5"/><circle cx="760" cy="300" r="2"/>
+  </g>
+  <g fill="#fde68a">
+    <path d="M390 70 l6 16 16 6 -16 6 -6 16 -6 -16 -16 -6 16 -6z" opacity="0.9"/>
+    <path d="M110 300 l4 10 10 4 -10 4 -4 10 -4 -10 -10 -4 10 -4z" opacity="0.7"/>
+    <path d="M1090 120 l5 13 13 5 -13 5 -5 13 -5 -13 -13 -5 13 -5z" opacity="0.8"/>
+  </g>
+
+  <!-- mascot: a friendly notebook holding a pencil -->
+  <g transform="translate(120 58)">
+    <ellipse cx="120" cy="262" rx="105" ry="12" fill="#000000" opacity="0.25"/>
+    <!-- arms -->
+    <path d="M24 150 q-38 6 -44 40" stroke="#fbbf24" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <path d="M216 140 q40 -18 52 -58" stroke="#fbbf24" stroke-width="14" stroke-linecap="round" fill="none"/>
+    <!-- pencil in the right hand -->
+    <g transform="translate(262 18) rotate(28)">
+      <rect x="-9" y="0" width="18" height="78" rx="3" fill="#f472b6"/>
+      <rect x="-9" y="0" width="18" height="12" rx="3" fill="#e5e7eb"/>
+      <path d="M-9 78 L9 78 L0 100 Z" fill="#fcd9b6"/>
+      <path d="M-3 92 L3 92 L0 100 Z" fill="#334155"/>
+    </g>
+    <!-- body / cover -->
+    <rect x="20" y="20" width="200" height="236" rx="26" fill="url(#cover)" stroke="#d97706" stroke-width="4"/>
+    <!-- page peeking out -->
+    <rect x="44" y="44" width="160" height="190" rx="14" fill="url(#page)"/>
+    <g stroke="#cbd5e1" stroke-width="3" stroke-linecap="round">
+      <line x1="64" y1="182" x2="184" y2="182"/>
+      <line x1="64" y1="202" x2="164" y2="202"/>
+      <line x1="64" y1="222" x2="140" y2="222"/>
+    </g>
+    <!-- spiral rings -->
+    <g fill="none" stroke="#475569" stroke-width="5" stroke-linecap="round">
+      <path d="M30 60 q-22 6 0 16"/><path d="M30 100 q-22 6 0 16"/><path d="M30 140 q-22 6 0 16"/>
+      <path d="M30 180 q-22 6 0 16"/><path d="M30 220 q-22 6 0 16"/>
+    </g>
+    <!-- face -->
+    <ellipse cx="96" cy="104" rx="15" ry="18" fill="#1e293b"/>
+    <ellipse cx="156" cy="104" rx="15" ry="18" fill="#1e293b"/>
+    <circle cx="101" cy="97" r="5.5" fill="#ffffff"/>
+    <circle cx="161" cy="97" r="5.5" fill="#ffffff"/>
+    <ellipse cx="76" cy="136" rx="13" ry="8" fill="#fb7185" opacity="0.55"/>
+    <ellipse cx="176" cy="136" rx="13" ry="8" fill="#fb7185" opacity="0.55"/>
+    <path d="M108 134 q18 20 36 0" stroke="#1e293b" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <!-- tiny checkmark badge -->
+    <circle cx="214" cy="30" r="22" fill="#10b981" stroke="#ffffff" stroke-width="4"/>
+    <path d="M203 30 l8 8 14 -16" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+
+  <!-- title and tagline -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="500" y="160" font-size="92" font-weight="800" fill="#ffffff" letter-spacing="-2">worklog</text>
+    <text x="504" y="212" font-size="30" font-weight="500" fill="#e0e7ff">Your Claude Code day, in one readable file.</text>
+    <g font-size="20" font-weight="600">
+      <rect x="504" y="246" width="170" height="40" rx="20" fill="#ffffff" fill-opacity="0.12"/>
+      <text x="589" y="273" fill="#fde68a" text-anchor="middle">every chat</text>
+      <rect x="686" y="246" width="170" height="40" rx="20" fill="#ffffff" fill-opacity="0.12"/>
+      <text x="771" y="273" fill="#a7f3d0" text-anchor="middle">every repo</text>
+      <rect x="868" y="246" width="200" height="40" rx="20" fill="#ffffff" fill-opacity="0.12"/>
+      <text x="968" y="273" fill="#fbcfe8" text-anchor="middle">every computer</text>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 664" width="1000" height="664" role="img" aria-label="Example day file: a summary of the day, then each message with its tickets, PRs, kubectl commands and tables">
+  <defs>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1000" height="664" rx="18" fill="url(#shade)"/>
+  <!-- window bar -->
+  <rect x="0" y="0" width="1000" height="46" rx="18" fill="#1f2937"/>
+  <rect x="0" y="28" width="1000" height="18" fill="#1f2937"/>
+  <circle cx="28" cy="23" r="7" fill="#f87171"/><circle cx="52" cy="23" r="7" fill="#fbbf24"/><circle cx="76" cy="23" r="7" fill="#34d399"/>
+  <text x="500" y="29" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15" fill="#9ca3af">my-logs / my-macbook / 2026-11-06.md</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16">
+    <text x="36" y="92" font-size="24" font-weight="700" fill="#f9fafb"># Work log 2026-11-06 · my-macbook</text>
+
+    <text x="36" y="132" font-weight="700" fill="#a5b4fc">## Summary</text>
+    <text x="36" y="160" fill="#e5e7eb"><tspan fill="#fbbf24">•</tspan> 14 messages across 2 projects: shop-api (10), web-app (4)</text>
+    <text x="36" y="184" fill="#e5e7eb"><tspan fill="#fbbf24">•</tspan> Tickets: <tspan fill="#67e8f9">ABC-142</tspan>, <tspan fill="#67e8f9">ABC-157</tspan></text>
+    <text x="36" y="208" fill="#e5e7eb"><tspan fill="#fbbf24">•</tspan> PRs: <tspan fill="#f9a8d4">shop-api#88</tspan></text>
+    <text x="36" y="232" fill="#e5e7eb"><tspan fill="#fbbf24">•</tspan> kubectl: 6 commands (staging 4, prod 2), 1 changing something</text>
+    <text x="36" y="256" fill="#e5e7eb"><tspan fill="#fbbf24">•</tspan> Also: 1 reply stopped by you</text>
+
+    <text x="36" y="298" font-weight="700" fill="#a5b4fc">## Timeline</text>
+
+    <!-- entry 1 -->
+    <rect x="28" y="312" width="944" height="204" rx="12" fill="#1f2937" opacity="0.7"/>
+    <text x="48" y="342" font-weight="700" fill="#f9fafb">### 14:05 · shop-api · ABC-142</text>
+    <text x="48" y="370" fill="#e5e7eb"><tspan font-weight="700" fill="#fde68a">You:</tspan> why does checkout fail on staging?</text>
+    <text x="48" y="396" fill="#e5e7eb"><tspan fill="#fbbf24">-</tspan> Tickets: <tspan fill="#67e8f9">ABC-142</tspan>  ·  PRs: <tspan fill="#f9a8d4">shop-api#88</tspan></text>
+    <text x="48" y="420" fill="#e5e7eb"><tspan fill="#fbbf24">-</tspan> kubectl staging · logs deploy/shop-api</text>
+    <text x="48" y="444" fill="#e5e7eb"><tspan fill="#fbbf24">-</tspan> kubectl prod · set env deployment/shop-api <tspan font-weight="700" fill="#fca5a5">(write)</tspan></text>
+    <text x="48" y="474" fill="#9ca3af">| Step    | Result            |</text>
+    <text x="48" y="498" fill="#9ca3af">| payment | timeout after 30s |</text>
+
+    <!-- entry 2 -->
+    <rect x="28" y="530" width="944" height="110" rx="12" fill="#1f2937" opacity="0.7"/>
+    <text x="48" y="560" font-weight="700" fill="#f9fafb">### 15:20 · web-app · main</text>
+    <text x="48" y="588" fill="#e5e7eb"><tspan font-weight="700" fill="#fde68a">You:</tspan> fix this <tspan fill="#c4b5fd">`[pasted 42 lines: TypeError: cart is undefined]`</tspan></text>
+    <text x="48" y="616" fill="#e5e7eb"><tspan fill="#fbbf24">-</tspan> <tspan fill="#fca5a5">■</tspan> <tspan font-weight="700">Stopped by you</tspan></text>
+  </g>
+</svg>
