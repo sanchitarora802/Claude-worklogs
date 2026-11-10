@@ -29,9 +29,8 @@ import json
 import os
 import re
 import shlex
-import shutil
 import sys
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -46,7 +45,7 @@ PROJECTS_DIR = Path.home() / ".claude" / "projects"
 def use_folders(log_root):
     global LOG_DIR, DAYS_DIR, OFFSETS_FILE, LOCK_FILE
     state = config.data_dir()
-    LOG_DIR = Path(log_root) / MACHINE
+    LOG_DIR = Path(log_root) / MACHINE if log_root else None
     DAYS_DIR, OFFSETS_FILE, LOCK_FILE = state / "days", state / "offsets.json", state / "worklog.lock"
     state.mkdir(parents=True, exist_ok=True)
 
@@ -281,11 +280,15 @@ def new_turn(entry, transcript, you):
 
 
 class Days:
-    # Loads each day's turns lazily and writes back only the days that changed.
-    def __init__(self):
-        self.cache, self.dirty = {}, set()
+    # Loads each day's turns lazily and writes back only the days that changed. With fresh=True
+    # (rebuild), a day starts empty the first time a chat touches it, so it's rebuilt only from chats
+    # still on disk; days no chat touches (older than Claude Code keeps chats) are left as they are.
+    def __init__(self, fresh=False):
+        self.cache, self.dirty, self.fresh = {}, set(), fresh
 
     def turns(self, day):
+        if day not in self.cache and self.fresh:
+            self.cache[day] = []
         if day not in self.cache:
             try:
                 self.cache[day] = json.loads((DAYS_DIR / f"{day}.json").read_text())
@@ -304,6 +307,10 @@ class Days:
         turns.append(turn)
         return [turn["day"], len(turns) - 1]
 
+    def touch(self, day):
+        self.turns(day)
+        self.dirty.add(day)
+
     def get(self, ref):
         day, idx = ref
         turns = self.turns(day)
@@ -313,17 +320,32 @@ class Days:
         return None
 
     def flush(self):
+        if not self.dirty or LOG_DIR is None:
+            return
         DAYS_DIR.mkdir(parents=True, exist_ok=True)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         for day in sorted(self.dirty):
             turns = self.cache[day]
+            if not turns:
+                # Only excluded repos left on that day (after a rebuild): remove the day.
+                for path in (DAYS_DIR / f"{day}.json", LOG_DIR / f"{day}.md"):
+                    if path.exists():
+                        path.unlink()
+                continue
             turns.sort(key=lambda t: t["time"])
             write_atomic(DAYS_DIR / f"{day}.json", json.dumps(turns))
             write_atomic(LOG_DIR / f"{day}.md", mask(render(day, turns)))
 
 
-def process(transcript, offsets, days):
-    key = str(transcript)
+def transcript_key(transcript):
+    # The same chat can reach us under two spellings (macOS folders ignore case, and Claude Code
+    # names project folders from the path you opened), so key saved positions on the file itself.
+    st = transcript.stat()
+    return f"{st.st_dev}:{st.st_ino}" if st.st_ino else os.path.normcase(str(transcript.resolve()))
+
+
+def process(transcript, offsets, days, settings):
+    key = transcript_key(transcript)
     saved = offsets.get(key, {})
     offset, last, seen_prs = saved.get("offset", 0), saved.get("last"), saved.get("prs", [])
     if offset > transcript.stat().st_size:
@@ -347,6 +369,15 @@ def process(transcript, offsets, days):
                     current["stopped"] = stopped
                 continue
             you = human_text(entry)
+            reason = skip(entry, settings) if you else None
+            if reason:
+                # Logging off, an excluded repo, or older than allowed: this message and its reply
+                # are passed over for good (still marked as read, so they never come back later).
+                # On a rebuild, an excluded repo's day is touched so its old entries are dropped.
+                if reason == "excluded" and days.fresh:
+                    days.touch(local_time(entry.get("timestamp")).strftime("%Y-%m-%d"))
+                current, last = None, None
+                continue
             if you:
                 current = new_turn(entry, transcript, you)
                 add_unique(current["tickets"], tickets_in(you))
@@ -364,6 +395,33 @@ def process(transcript, offsets, days):
                     add_unique(current["prs"], [pr])
                     tidy_prs(current)
     offsets[key] = {"offset": offset, "last": last, "prs": seen_prs}
+
+
+def skip(entry, settings):
+    # Why a message isn't logged, or None.
+    if not settings.enabled:
+        return "off"
+    if settings.excluded(entry.get("cwd")):
+        return "excluded"
+    oldest = settings.oldest_day()
+    if oldest and local_time(entry.get("timestamp")).date() < oldest:
+        return "too old"
+    return None
+
+
+def prune(settings):
+    # "Keep logs for N days": delete this computer's older day files. Other computers' subfolders
+    # are never touched; each prunes its own.
+    if not settings.keep_days or not LOG_DIR or not LOG_DIR.is_dir():
+        return 0
+    cutoff = (date.today() - timedelta(days=settings.keep_days - 1)).isoformat()
+    removed = 0
+    for folder, suffix in ((LOG_DIR, ".md"), (DAYS_DIR, ".json")):
+        for path in folder.glob("????-??-??" + suffix):
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", path.stem) and path.stem < cutoff:
+                path.unlink()
+                removed += folder == LOG_DIR
+    return removed
 
 
 def count_by(values):
@@ -448,16 +506,16 @@ def load_offsets():
 def unread(transcript, offsets):
     # True when a chat has lines not logged yet: an Esc-stopped reply, or a window force-closed
     # before its end-of-chat pass ran.
-    return transcript.stat().st_size != offsets.get(str(transcript), {}).get("offset", 0)
+    return transcript.stat().st_size != offsets.get(transcript_key(transcript), {}).get("offset", 0)
 
 
-def run(log_root, mode="hook", transcript=None):
+def run(log_root, mode="hook", transcript=None, settings=None):
+    settings = settings or config.Settings(ask_cli=mode in ("rebuild", "backfill"))
     use_folders(log_root)
     with platforms.locked(LOCK_FILE):
         if mode == "rebuild":
-            shutil.rmtree(DAYS_DIR, ignore_errors=True)
             OFFSETS_FILE.unlink(missing_ok=True)
-        offsets, days = load_offsets(), Days()
+        offsets, days = load_offsets(), Days(fresh=mode == "rebuild")
         if mode in ("backfill", "rebuild", "catchup"):
             files = sorted(PROJECTS_DIR.glob("*/*.jsonl"), key=lambda p: p.stat().st_mtime)
             if mode == "catchup":
@@ -465,8 +523,10 @@ def run(log_root, mode="hook", transcript=None):
         else:
             files = [transcript]
         for path in files:
-            process(path, offsets, days)
+            process(path, offsets, days, settings)
         days.flush()
+        if mode != "hook":
+            prune(settings)
         write_atomic(OFFSETS_FILE, json.dumps(offsets))
         return len(files), len(days.dirty)
 
@@ -475,19 +535,26 @@ def main():
     flags = {"--rebuild": "rebuild", "--backfill": "backfill", "--catchup": "catchup"}
     mode = next((m for f, m in flags.items() if f in sys.argv), "hook")
     root = config.log_root(ask_cli=mode in ("rebuild", "backfill"))
+    settings = config.Settings(ask_cli=mode in ("rebuild", "backfill"))
+    # Logging off: still mark chats as read (writing nothing), so they're skipped for good.
+    usable = root and root.is_dir()
     if mode == "hook":
         path = json.load(sys.stdin).get("transcript_path")
         # A missing folder (sync drive not mounted) is skipped, not created; it catches up later.
-        if root and root.is_dir() and path and Path(path).is_file():
-            run(root, "hook", Path(path))
+        if (usable or not settings.enabled) and path and Path(path).is_file():
+            run(root if usable else None, "hook", Path(path), settings)
         return
     if mode == "catchup":
-        if root and root.is_dir():
-            run(root, mode)
+        if usable or not settings.enabled:
+            run(root if usable else None, mode, settings=settings)
         return
     if not root:
         sys.exit("No log folder set. Run /worklog:setup first.")
-    read, wrote = run(root, mode)
+    if not root.is_dir():
+        sys.exit(f"Log folder not found: {root} (is the sync drive available?)")
+    if not settings.enabled:
+        sys.exit("Logging is off. Turn it on in /config (worklog: Logging) first.")
+    read, wrote = run(root, mode, settings=settings)
     print(f"read {read} transcripts, wrote {wrote} day files to {LOG_DIR}")
 
 

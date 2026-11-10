@@ -11,6 +11,8 @@
 #                      any      Python's tkinter, when none of the above is available
 #                    Returns a Path, None when the user cancelled, or raises NoPicker when this
 #                    system has no way to show a dialog (then setup asks for a typed path).
+#   choose_many()    a tick-box list (used for "repos not to log"), with the same per-system tools.
+#                    Returns the ticked items, None when cancelled, or raises NoPicker.
 #
 # Only the macOS paths have been run; Windows and Linux are written to their documented APIs
 # but untested.
@@ -84,6 +86,17 @@ def pick_folder(current, note, help_url):
     pickers = {"Darwin": [_mac], "Windows": [_windows], "Linux": [_zenity, _kdialog]}.get(SYSTEM, [])
     for picker in pickers + [_tk]:
         result = picker(start, note, help_url)
+        if result != "unavailable":
+            return result
+    raise NoPicker()
+
+
+def choose_many(title, prompt, items, ticked):
+    if not items:
+        return []
+    pickers = {"Darwin": [_mac_list], "Windows": [_windows_list], "Linux": [_zenity_list, _kdialog_list]}
+    for picker in pickers.get(SYSTEM, []) + [_tk_list]:
+        result = picker(title, prompt, items, ticked)
         if result != "unavailable":
             return result
     raise NoPicker()
@@ -186,6 +199,106 @@ def _tk(start, note, help_url):
         return Path(chosen) if chosen else None
     finally:
         root.destroy()
+
+
+def _mac_list(title, prompt, items, ticked):
+    listing = "{" + ", ".join(_applescript_text(i) for i in items) + "}"
+    chosen = "{" + ", ".join(_applescript_text(i) for i in ticked if i in items) + "}"
+    code, out = _run(["osascript",
+                      "-e", f"set picked to choose from list {listing} with title {_applescript_text(title)}"
+                            f" with prompt {_applescript_text(prompt)} default items {chosen}"
+                            " OK button name \"Save\" with multiple selections allowed and empty selection allowed",
+                      "-e", 'if picked is false then return "__WORKLOG_CANCEL__"',
+                      "-e", "set AppleScript's text item delimiters to linefeed",
+                      "-e", "return picked as text"])
+    if code is None:
+        return "unavailable"
+    if code != 0 or out == "__WORKLOG_CANCEL__":
+        return None
+    return [line for line in out.splitlines() if line in items]
+
+
+_WINDOWS_LIST_SCRIPT = r"""
+Add-Type -AssemblyName System.Windows.Forms
+$form = New-Object System.Windows.Forms.Form
+$form.Text = $env:WORKLOG_TITLE; $form.Width = 640; $form.Height = 520; $form.StartPosition = 'CenterScreen'
+$label = New-Object System.Windows.Forms.Label
+$label.Text = $env:WORKLOG_PROMPT; $label.Dock = 'Top'; $label.Height = 48
+$list = New-Object System.Windows.Forms.CheckedListBox
+$list.Dock = 'Fill'; $list.CheckOnClick = $true
+$ticked = $env:WORKLOG_TICKED -split "`n"
+foreach ($item in ($env:WORKLOG_ITEMS -split "`n")) { [void]$list.Items.Add($item, ($ticked -contains $item)) }
+$panel = New-Object System.Windows.Forms.FlowLayoutPanel
+$panel.Dock = 'Bottom'; $panel.Height = 44; $panel.FlowDirection = 'RightToLeft'
+$ok = New-Object System.Windows.Forms.Button; $ok.Text = 'Save'; $ok.DialogResult = 'OK'
+$cancel = New-Object System.Windows.Forms.Button; $cancel.Text = 'Cancel'; $cancel.DialogResult = 'Cancel'
+$panel.Controls.AddRange(@($ok, $cancel)); $form.AcceptButton = $ok; $form.CancelButton = $cancel
+$form.Controls.AddRange(@($list, $label, $panel))
+if ($form.ShowDialog() -ne 'OK') { exit 1 }
+$list.CheckedItems | ForEach-Object { Write-Output $_ }
+"""
+
+
+def _windows_list(title, prompt, items, ticked):
+    shell = shutil.which("powershell") or shutil.which("pwsh")
+    if not shell:
+        return "unavailable"
+    env = dict(os.environ, WORKLOG_TITLE=title, WORKLOG_PROMPT=prompt, WORKLOG_ITEMS="\n".join(items),
+               WORKLOG_TICKED="\n".join(ticked))
+    code, out = _run([shell, "-NoProfile", "-STA", "-Command", _WINDOWS_LIST_SCRIPT], env=env)
+    if code is None:
+        return "unavailable"
+    return [line.strip() for line in out.splitlines() if line.strip() in items] if code == 0 else None
+
+
+def _zenity_list(title, prompt, items, ticked):
+    if not (_has_display() and shutil.which("zenity")):
+        return "unavailable"
+    rows = []
+    for item in items:
+        rows += ["TRUE" if item in ticked else "FALSE", item]
+    code, out = _run(["zenity", "--list", "--checklist", f"--title={title}", f"--text={prompt}",
+                      "--column=Skip", "--column=Folder", "--separator=\n", "--width=640", "--height=480"] + rows)
+    return [line for line in out.splitlines() if line in items] if code == 0 else None
+
+
+def _kdialog_list(title, prompt, items, ticked):
+    if not (_has_display() and shutil.which("kdialog")):
+        return "unavailable"
+    rows = []
+    for i, item in enumerate(items):
+        rows += [str(i), item, "on" if item in ticked else "off"]
+    code, out = _run(["kdialog", "--title", title, "--separate-output", "--checklist", prompt] + rows)
+    if code != 0:
+        return None
+    return [items[int(x)] for x in out.split() if x.isdigit() and int(x) < len(items)]
+
+
+def _tk_list(title, prompt, items, ticked):
+    if SYSTEM == "Linux" and not _has_display():
+        return "unavailable"
+    try:
+        import tkinter
+        root = tkinter.Tk()
+    except Exception:  # tkinter missing, or no display to open a window on
+        return "unavailable"
+    root.title(title)
+    tkinter.Label(root, text=prompt, justify="left", wraplength=560).pack(anchor="w", padx=12, pady=8)
+    states = [tkinter.BooleanVar(root, value=item in ticked) for item in items]
+    for item, state in zip(items, states):
+        tkinter.Checkbutton(root, text=item, variable=state, anchor="w").pack(fill="x", padx=12)
+    result = {"value": None}
+
+    def save():
+        result["value"] = [item for item, state in zip(items, states) if state.get()]
+        root.destroy()
+
+    buttons = tkinter.Frame(root)
+    buttons.pack(fill="x", padx=12, pady=10)
+    tkinter.Button(buttons, text="Save", command=save).pack(side="right")
+    tkinter.Button(buttons, text="Cancel", command=root.destroy).pack(side="right", padx=6)
+    root.mainloop()
+    return result["value"]
 
 
 if __name__ == "__main__":

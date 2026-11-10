@@ -27,6 +27,16 @@ Code, across all your projects and computers. ✨
   other apps.
 - ✍️ **It writes your messages in full** to the log folder, along with ticket numbers, PRs and summaries
   of the commands that ran, including commands run against production.
+- 🧑‍💻 **It reads the code in your chats.** A chat's transcript holds everything Claude saw: the source
+  files it opened, diffs, command output and anything you pasted. The plugin reads all of it to find
+  what to log, but keeps very little of it:
+  - **Kept:** code you type in a message (short snippets as typed; longer code blocks and pastes as
+    one line, which still includes their **first line**), and **tables from Claude's replies**, which
+    can hold query results, including rows of production data.
+  - **Not kept:** files Claude read, diffs, command output, and code you had selected in your editor.
+
+  So **your log can contain code and data from your projects.** Treat it with the same care as the
+  repos themselves, and check your employer's rules before syncing it anywhere.
 - 🏠 **Nothing leaves your computer.** There's no network access, no server, no analytics and no AI
   model. The only place data goes is the folder you pick, and from there wherever your sync app
   copies it.
@@ -90,8 +100,8 @@ In Claude Code:
 ```
 
 Claude Code asks for the log folder when you install. You can leave it blank and run `/worklog:setup`
-afterwards to choose it in a folder picker instead. Until a folder is set, nothing is logged, and you'll see a
-reminder when a new chat starts.
+afterwards: it opens a folder picker, then a tick-box list of repos you don't want logged. Until a
+folder is set, nothing is logged, and you'll see a reminder when a new chat starts.
 
 After that, `/worklog:status` shows where logs are going, and `/worklog:day 2026-11-06` (or just asking
 "what did I do last Friday?") summarises a day.
@@ -108,6 +118,21 @@ After that, `/worklog:status` shows where logs are going, and `/worklog:day 2026
 
 If the folder goes missing, for example because a sync drive isn't mounted, logging pauses. It catches up
 on its own once the folder is back.
+
+## 🎛️ Options
+
+Every option has a default, so at install only the folder needs an answer. Change any of them later.
+
+| Option | Default | What it does | Change it with |
+|---|---|---|---|
+| 🔘 **Logging** | On | Off stops all logging. Chats while it's off are never logged, not even later. | `/config` toggle |
+| 🚫 **Repos not to log** | None | Tick-box list of every folder you've used Claude Code in. A ticked folder covers its subfolders; new repos are logged unless you tick them. | `/worklog:repos` |
+| 🗓️ **Keep logs for (days)** | 0 (forever) | Deletes this computer's day files older than that. Other computers' files are never touched. | `/config` |
+| ⏪ **Backfill from** | Empty (everything) | Never logs anything older than this date (`YYYY-MM-DD`), including past chats logged at setup. | `/config` |
+
+Changes apply from now on. To re-apply them to chats still on disk, run
+`sh scripts/run.sh worklog.py --rebuild` from the plugin folder; day files older than Claude Code
+keeps chats are left as they are.
 
 ## ⚙️ How it works
 
