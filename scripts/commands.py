@@ -7,8 +7,12 @@
 #   commands.py setup [PATH]     /worklog:setup. Without PATH: shows a note on choosing a folder,
 #                                then this system's folder picker (see platforms.py). Saves the
 #                                choice, checks it's writable, then logs every past chat into it.
-#   commands.py status           /worklog:status: folder, this Mac's latest file, other Macs.
-#   commands.py day DATE         /worklog:day: prints that day's log from every Mac, for Claude
+#                                Then the "repos not to log" checklist, as in `repos`.
+#   commands.py repos [PATH…]    /worklog:repos: tick the folders not to log, from every folder
+#                                Claude Code has been used in. With paths, sets the list directly;
+#                                "none" clears it. Un-ticked folders are logged from now on only.
+#   commands.py status           /worklog:status: folder, settings, each computer's latest file.
+#   commands.py day DATE         /worklog:day: prints that day's log from every computer, for Claude
 #                                to summarise. DATE is YYYY-MM-DD, "today" or "yesterday".
 import json
 import subprocess
@@ -32,6 +36,69 @@ def writable(folder):
         return False
 
 
+REPOS_TITLE = "Worklog: repos not to log"
+REPOS_PROMPT = ("Tick the folders worklog should NOT log. A ticked folder covers its subfolders. "
+                "Folders you use later are logged unless you tick them here.")
+
+
+def shown(path):
+    home = str(Path.home())
+    text = str(path)
+    return "~" + text[len(home):] if text == home or text.startswith(home + "/") or text.startswith(home + "\\") else text
+
+
+def known_folders():
+    # Every folder a Claude Code chat has run in (the "cwd" of your messages), plus any already excluded.
+    found = set()
+    for transcript in worklog.PROJECTS_DIR.glob("*/*.jsonl"):
+        with open(transcript, "rb") as f:
+            for line in f:
+                if b'"human"' not in line or b'"cwd"' not in line:
+                    continue
+                try:
+                    cwd = json.loads(line).get("cwd")
+                except json.JSONDecodeError:
+                    continue
+                if cwd:
+                    found.add(str(Path(cwd)))
+    found.update(str(p) for p in config.Settings().exclude)
+    return sorted(found, key=str.lower)
+
+
+def choose_repos():
+    # Returns a message describing the result.
+    folders = known_folders()
+    current = [str(p) for p in config.Settings().exclude]
+    labels = [shown(f) for f in folders]
+    try:
+        picked = platforms.choose_many(REPOS_TITLE, REPOS_PROMPT, labels, [shown(c) for c in current])
+    except platforms.NoPicker:
+        listing = "\n".join(f"  {label}" for label in labels)
+        return ("This system can't show a checklist. Folders Claude Code has been used in:\n" + listing
+                + "\nSet the ones not to log with: /worklog:repos <folder> [<folder> …]")
+    if picked is None:
+        return "Repos list unchanged."
+    chosen = [folders[labels.index(label)] for label in picked]
+    config.save_exclude(chosen)
+    return describe_exclude(chosen)
+
+
+def describe_exclude(paths):
+    if not paths:
+        return "Logging every repo."
+    return "Not logging (subfolders included):\n" + "\n".join(f"  - {shown(p)}" for p in paths)
+
+
+def repos(args):
+    if args:
+        chosen = [] if [a.lower() for a in args] == ["none"] else [str(Path(a).expanduser()) for a in args]
+        config.save_exclude(chosen)
+        print(describe_exclude(chosen))
+    else:
+        print(choose_repos())
+    print("\nChanges apply from now on. Chats already logged stay in the log.")
+
+
 def setup(args):
     current = config.log_root(ask_cli=True)
     if args:
@@ -51,12 +118,24 @@ def setup(args):
     if not writable(folder):
         sys.exit(f"Can't write to {folder}. Pick another folder.")
     where = config.save_log_root(folder)
+    repos_result = choose_repos() if not args else describe_exclude([str(p) for p in config.Settings().exclude])
     read, wrote = worklog.run(folder, "backfill")
     print(f"Log folder: {folder}")
     print(f"Saved to: {where}")
     print(f"This computer writes to: {folder / worklog.MACHINE}")
     print(f"Logged past chats: read {read} transcripts, wrote {wrote} day files.")
+    print(repos_result)
     print("\nNote: " + config.FOLDER_NOTE)
+
+
+def describe_settings(settings):
+    oldest = settings.oldest_day()
+    lines = [f"Logging: {'on' if settings.enabled else 'OFF (chats while off are never logged)'}",
+             f"Keep logs for: {f'{settings.keep_days} days' if settings.keep_days else 'forever'}",
+             f"Backfill from: {settings.backfill_from or 'everything still on disk'}"
+             + (f" (oldest day logged: {oldest})" if oldest else ""),
+             describe_exclude([str(p) for p in settings.exclude])]
+    return "\n".join(lines)
 
 
 def status(_args):
@@ -66,6 +145,8 @@ def status(_args):
         return
     print(f"Log folder: {root}" + ("" if root.is_dir() else "  (MISSING: is the sync drive available?)"))
     print(f"This computer: {worklog.MACHINE}")
+    print(describe_settings(config.Settings(ask_cli=True)))
+    print("Change these with /config, /plugin configure worklog@worklog, or /worklog:repos.\n")
     if not root.is_dir():
         return
     for machine in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):
@@ -117,6 +198,12 @@ def catch_up():
 def check(_args):
     # SessionStart: silent when fine; otherwise a one-line warning shown to the user.
     root = config.log_root()
+    settings = config.Settings()
+    if not settings.enabled:
+        catch_up()  # marks chats as read without logging them, so they're skipped for good
+        print(json.dumps({"systemMessage": "worklog: logging is off, so this chat won't be logged. "
+                                            "Turn it on in /config (worklog: Logging)."}))
+        return
     if root and root.is_dir():
         catch_up()
         return
@@ -128,9 +215,9 @@ def check(_args):
     print(json.dumps({"systemMessage": message}))
 
 
-COMMANDS = {"check": check, "setup": setup, "status": status, "day": day}
+COMMANDS = {"check": check, "setup": setup, "repos": repos, "status": status, "day": day}
 
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
-        sys.exit("usage: commands.py check|setup [PATH]|status|day DATE")
+        sys.exit("usage: commands.py check|setup [PATH]|repos [PATH…|none]|status|day DATE")
     COMMANDS[sys.argv[1]](sys.argv[2:])
