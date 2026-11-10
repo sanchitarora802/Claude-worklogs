@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "claude-worklog",
+  "name": "worklog",
   "description": "Personal work log for Claude Code sessions.",
   "owner": {
     "name": "Sanchit Arora",
@@ -8,7 +8,7 @@
   },
   "plugins": [
     {
-      "name": "claude-worklog",
+      "name": "worklog",
       "description": "One readable log file per day of everything done with Claude Code.",
       "source": "./",
       "category": "productivity"

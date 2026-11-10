@@ -3,7 +3,10 @@
 #
 # Runs as a Stop hook (after every turn) and a SessionEnd hook. Each run reads only the part of the
 # session transcript it has not seen yet and rebuilds that day's file:
-#   $WORKLOG_DIR/<machine>/YYYY-MM-DD.md   (WORKLOG_DIR defaults to ~/worklog)
+#   <log folder>/<machine>/YYYY-MM-DD.md
+# The log folder is the plugin's log_dir option, chosen with /worklog:setup (see config.py).
+# Until one is set, nothing is logged and nothing is marked as read, so setting it later still
+# picks up every chat since.
 #
 # What a day file holds:
 #   - a 4-5 point summary of the day at the top (projects, tickets, PRs, kubectl, notes)
@@ -12,9 +15,9 @@
 #     summary per kubectl command, and any line starting with "log:" (yours or Claude's)
 # Nothing else from replies or tool output is kept, and raw transcripts are never copied.
 #
-# Each machine writes only its own subfolder, so two Macs syncing one WORKLOG_DIR never collide.
-# Parsed turns live per day as JSON in $WORKLOG_STATE_DIR (default ~/.claude/worklog), local to
-# the machine, and the Markdown is re-rendered from them atomically. Secrets are masked on render.
+# Each machine writes only its own subfolder, so two Macs syncing one folder never collide.
+# Parsed turns live per day as JSON in the plugin's data folder, local to the machine, and the
+# Markdown is re-rendered from them atomically. Secrets are masked on render.
 #
 #   worklog.py               hook mode, reads the hook JSON on stdin
 #   worklog.py --backfill    log every transcript under ~/.claude/projects (safe to re-run)
@@ -27,28 +30,25 @@ import os
 import re
 import shlex
 import shutil
-import socket
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import config  # noqa: E402
 
-def machine_name():
-    try:
-        return subprocess.run(["scutil", "--get", "LocalHostName"], capture_output=True, text=True,
-                              timeout=5).stdout.strip() or socket.gethostname()
-    except (OSError, subprocess.SubprocessError):
-        return socket.gethostname()
-
-
-MACHINE = machine_name()
-LOG_DIR = Path(os.environ.get("WORKLOG_DIR") or Path.home() / "worklog").expanduser() / MACHINE
-STATE_DIR = Path(os.environ.get("WORKLOG_STATE_DIR") or Path.home() / ".claude" / "worklog").expanduser()
-DAYS_DIR = STATE_DIR / "days"
-OFFSETS_FILE = STATE_DIR / "offsets.json"
-LOCK_FILE = STATE_DIR / "worklog.lock"
+MACHINE = config.machine_name()
+LOG_DIR = DAYS_DIR = OFFSETS_FILE = LOCK_FILE = None
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
+
+
+def use_folders(log_root):
+    global LOG_DIR, DAYS_DIR, OFFSETS_FILE, LOCK_FILE
+    state = config.data_dir()
+    LOG_DIR = Path(log_root) / MACHINE
+    DAYS_DIR, OFFSETS_FILE, LOCK_FILE = state / "days", state / "offsets.json", state / "worklog.lock"
+    state.mkdir(parents=True, exist_ok=True)
+
 
 STRIP_TAGS = re.compile(
     r"<(system-reminder|ide_selection|ide_opened_file|ide_diagnostics|command-message|"
@@ -413,26 +413,38 @@ def load_offsets():
         return {}
 
 
-def main():
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
+def run(log_root, mode="hook", transcript=None):
+    use_folders(log_root)
     with open(LOCK_FILE, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if "--rebuild" in sys.argv:
+        if mode == "rebuild":
             shutil.rmtree(DAYS_DIR, ignore_errors=True)
             OFFSETS_FILE.unlink(missing_ok=True)
         offsets, days = load_offsets(), Days()
-        if "--backfill" in sys.argv or "--rebuild" in sys.argv:
+        if mode in ("backfill", "rebuild"):
             files = sorted(PROJECTS_DIR.glob("*/*.jsonl"), key=lambda p: p.stat().st_mtime)
-            for transcript in files:
-                process(transcript, offsets, days)
-            print(f"read {len(files)} transcripts, wrote {len(days.dirty)} day files to {LOG_DIR}")
         else:
-            path = json.load(sys.stdin).get("transcript_path")
-            if not path or not Path(path).is_file():
-                return
-            process(Path(path), offsets, days)
+            files = [transcript]
+        for path in files:
+            process(path, offsets, days)
         days.flush()
         write_atomic(OFFSETS_FILE, json.dumps(offsets))
+        return len(files), len(days.dirty)
+
+
+def main():
+    mode = "rebuild" if "--rebuild" in sys.argv else "backfill" if "--backfill" in sys.argv else "hook"
+    root = config.log_root(ask_cli=mode != "hook")
+    if mode == "hook":
+        path = json.load(sys.stdin).get("transcript_path")
+        # A missing folder (sync drive not mounted) is skipped, not created; it catches up later.
+        if root and root.is_dir() and path and Path(path).is_file():
+            run(root, "hook", Path(path))
+        return
+    if not root:
+        sys.exit("No log folder set. Run /worklog:setup first.")
+    read, wrote = run(root, mode)
+    print(f"read {read} transcripts, wrote {wrote} day files to {LOG_DIR}")
 
 
 if __name__ == "__main__":
