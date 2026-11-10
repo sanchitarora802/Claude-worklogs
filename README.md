@@ -16,6 +16,16 @@ Outside this repo, in a folder shared between the Macs: `$WORKLOG_DIR/<machine>/
 Each Mac writes only to its own subfolder, so syncing never conflicts. This repo holds only the plugin
 code. Raw transcripts are never copied to the shared folder.
 
+## Running it by hand
+
+```sh
+python3 scripts/worklog.py --backfill   # log every transcript not logged yet (safe to re-run)
+python3 scripts/worklog.py --rebuild    # forget what was parsed and rebuild every day file
+```
+
+`WORKLOG_DIR` sets where logs go (default `~/worklog`). `WORKLOG_JIRA_PREFIXES=BUZZ,OPS` limits ticket
+detection to those keys. Parse state stays on each machine in `~/.claude/worklog/`.
+
 ## Status
 
-Work in progress: skeleton only, not installed yet.
+Work in progress: the logger works (rule-based), not installed as a plugin yet.
