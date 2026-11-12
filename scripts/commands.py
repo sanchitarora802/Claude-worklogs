@@ -167,36 +167,70 @@ def status(_args):
     print("\nNote: " + config.FOLDER_NOTE)
 
 
-def day(args):
-    word = (args[0] if args else "today").lower()
-    if word == "pick":
+MAX_DAYS = 31  # longest range one summary reads, so a slip of the calendar can't flood the chat
+
+
+def one_date(word):
+    word = word.strip().lower()
+    if word == "today":
+        return date.today()
+    if word == "yesterday":
+        return date.today() - timedelta(days=1)
+    try:
+        return date.fromisoformat(word)
+    except ValueError:
+        sys.exit("Give a date (YYYY-MM-DD, today or yesterday), a range (FROM..TO), or pick.")
+
+
+def day_logs(root, wanted):
+    # Every log for that day anywhere under the log folder, at any depth (A/A1, A/A2/A2.1, ...).
+    # Only files worklog wrote count: a stray 2026-11-06.md of someone else's is skipped.
+    found = []
+    for path in sorted(root.rglob(f"{wanted:%Y-%m-%d}.md")):
         try:
-            wanted = platforms.pick_date("Worklog summary", "Choose the day to summarise.", date.today())
+            with open(path, encoding="utf-8") as handle:
+                if handle.readline().startswith("# Work log"):
+                    found.append(path)
+        except (OSError, UnicodeDecodeError):
+            pass
+    return found
+
+
+def day(args):
+    # day DATE | day FROM..TO | day pick (calendar). Prints every matching log, labelled by its folder.
+    word = " ".join(args).strip() or "today"
+    if word.lower() == "pick":
+        try:
+            picked = platforms.pick_dates("Worklog summary", "Click a day, or drag (or Shift-click) to choose "
+                                          "a range of days to summarise.", date.today())
         except platforms.NoPicker:
             sys.exit("No calendar can open on this system. Give the date instead: /worklog:summarise YYYY-MM-DD")
-        if not wanted:
+        if not picked:
             print("Cancelled: no date chosen.")
             return
-        print(f"Date: {wanted:%Y-%m-%d}")
-    elif word == "today":
-        wanted = date.today()
-    elif word == "yesterday":
-        wanted = date.today() - timedelta(days=1)
+        first, last = picked
+    elif ".." in word:
+        first, last = (one_date(part) for part in word.split("..", 1))
     else:
-        try:
-            wanted = date.fromisoformat(word)
-        except ValueError:
-            sys.exit("Give the date as YYYY-MM-DD, today, yesterday or pick.")
+        first = last = one_date(word)
+    first, last = min(first, last), max(first, last)
+    if (last - first).days >= MAX_DAYS:
+        sys.exit(f"That's {(last - first).days + 1} days; summarise at most {MAX_DAYS} at a time.")
     root = config.log_root(ask_cli=True)
     if not root:
         sys.exit("No log folder set. Run /worklog:setup first.")
-    found = sorted(root.glob(f"*/{wanted:%Y-%m-%d}.md"))
-    if not found:
-        print(f"No log for {wanted:%Y-%m-%d} from any computer in {root}.")
-        return
-    for path in found:
-        print(f"===== {path.parent.name} =====")
-        print(path.read_text(encoding="utf-8"))
+    print(f"Date: {first:%Y-%m-%d}" if first == last else f"Dates: {first:%Y-%m-%d} to {last:%Y-%m-%d}")
+    any_found = False
+    wanted = first
+    while wanted <= last:
+        for path in day_logs(root, wanted):
+            any_found = True
+            print(f"===== {path.parent.relative_to(root)} · {wanted:%Y-%m-%d} =====")
+            print(path.read_text(encoding="utf-8"))
+        wanted += timedelta(days=1)
+    if not any_found:
+        span = f"{first:%Y-%m-%d}" if first == last else f"{first:%Y-%m-%d} to {last:%Y-%m-%d}"
+        print(f"No log for {span} in {root} or any folder inside it.")
 
 
 def catch_up():
@@ -230,5 +264,5 @@ COMMANDS = {"check": check, "setup": setup, "repos": repos, "status": status, "d
 
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
-        sys.exit("usage: commands.py check|setup [PATH]|repos [PATH…|none]|status|day DATE|pick")
+        sys.exit("usage: commands.py check|setup [PATH]|repos [PATH…|none]|status|day DATE|FROM..TO|pick")
     COMMANDS[sys.argv[1]](sys.argv[2:])
