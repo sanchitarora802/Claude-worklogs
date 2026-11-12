@@ -92,19 +92,37 @@ install. Nothing breaks in Claude Code.
 
 ## 🚀 Install
 
-In Claude Code:
+**From a terminal (recommended).** This works everywhere, including when Claude Code is only installed
+inside VS Code or Cursor:
 
+```sh
+curl -fsSL https://raw.githubusercontent.com/sanchitarora802/Claude-worklogs/main/install.sh | sh
 ```
-/plugin marketplace add sanchitarora802/Claude-worklogs
-/plugin install worklog@worklog
-```
 
-Claude Code asks for the log folder when you install. You can leave it blank and run `/worklog:setup`
-afterwards: it opens a folder picker, then a tick-box list of repos you don't want logged. Until a
-folder is set, nothing is logged, and you'll see a reminder when a new chat starts.
+Add your log folder to set it in the same step:
+`… | sh -s -- "$HOME/Documents/my logs"`. Run the same command again later to update.
 
-After that, `/worklog:status` shows where logs are going, and `/worklog:day 2026-11-06` (or just asking
-"what did I do last Friday?") summarises a day.
+<details>
+<summary>Other ways to install</summary>
+
+- **VS Code extension:** type `/plugins` in the chat box → **Marketplaces** tab → add
+  `sanchitarora802/Claude-worklogs` → **Plugins** tab → **Install** → **Install for you**.
+- **Claude Code in a terminal:** `/plugin marketplace add sanchitarora802/Claude-worklogs`, then
+  `/plugin install worklog@sanchitarora802`.
+- **Ask Claude in any chat:** "Run `curl -fsSL https://raw.githubusercontent.com/sanchitarora802/Claude-worklogs/main/install.sh | sh`".
+- **Uninstall:** `/plugins` → 🗑 on **worklog@sanchitarora802**, then remove the **sanchitarora802** marketplace. Your log
+  files stay where they are.
+
+</details>
+
+> [!IMPORTANT]
+> **Claude Code loads plugins when a chat starts.** After installing, start a **new chat** (or run
+> `/reload-plugins` in a terminal session). The chat you installed from won't see the plugin.
+
+Then run `/worklog:setup` to choose the log folder (if you didn't pass one) and the repos you don't
+want logged. Until a folder is set, nothing is logged, and you'll see a reminder when a chat starts.
+`/worklog:status` shows where logs are going, and `/worklog:day 2026-11-06` (or just asking "what did I
+do last Friday?") summarises a day.
 
 ## 📁 Choosing a log folder
 

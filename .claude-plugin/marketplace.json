@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "worklog",
+  "name": "sanchitarora802",
   "description": "Personal work log for Claude Code sessions.",
   "owner": {
     "name": "Sanchit Arora",

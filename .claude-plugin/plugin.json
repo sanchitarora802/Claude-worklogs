@@ -1,6 +1,6 @@
 {
   "name": "worklog",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Logs every Claude Code session into one readable file per day: your messages, plus the reports, tickets, PRs and kubectl actions from the replies.",
   "author": {
     "name": "Sanchit Arora",
@@ -11,7 +11,7 @@
     "log_dir": {
       "type": "directory",
       "title": "Log folder",
-      "description": "Where daily logs are saved. Pick a folder that syncs between your own Macs (iCloud Drive, Google Drive, Dropbox). Don't pick one shared with other people: logs hold your full messages. Tip: /worklog:setup opens a Finder picker instead."
+      "description": "Where daily logs are saved. Pick a folder that syncs between your own computers (iCloud Drive, Google Drive, Dropbox, OneDrive). Don't pick one shared with other people: logs hold your full messages. Or leave it empty and run /worklog:setup to choose it in a folder picker."
     },
     "logging_enabled": {
       "type": "boolean",
