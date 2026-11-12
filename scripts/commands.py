@@ -169,7 +169,16 @@ def status(_args):
 
 def day(args):
     word = (args[0] if args else "today").lower()
-    if word == "today":
+    if word == "pick":
+        try:
+            wanted = platforms.pick_date("Worklog summary", "Choose the day to summarise.", date.today())
+        except platforms.NoPicker:
+            sys.exit("No calendar can open on this system. Give the date instead: /worklog:summarise YYYY-MM-DD")
+        if not wanted:
+            print("Cancelled: no date chosen.")
+            return
+        print(f"Date: {wanted:%Y-%m-%d}")
+    elif word == "today":
         wanted = date.today()
     elif word == "yesterday":
         wanted = date.today() - timedelta(days=1)
@@ -177,7 +186,7 @@ def day(args):
         try:
             wanted = date.fromisoformat(word)
         except ValueError:
-            sys.exit("Give the date as YYYY-MM-DD, today or yesterday.")
+            sys.exit("Give the date as YYYY-MM-DD, today, yesterday or pick.")
     root = config.log_root(ask_cli=True)
     if not root:
         sys.exit("No log folder set. Run /worklog:setup first.")
@@ -221,5 +230,5 @@ COMMANDS = {"check": check, "setup": setup, "repos": repos, "status": status, "d
 
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
-        sys.exit("usage: commands.py check|setup [PATH]|repos [PATH…|none]|status|day DATE")
+        sys.exit("usage: commands.py check|setup [PATH]|repos [PATH…|none]|status|day DATE|pick")
     COMMANDS[sys.argv[1]](sys.argv[2:])
