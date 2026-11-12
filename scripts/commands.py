@@ -122,6 +122,8 @@ def setup(args):
     read, wrote = worklog.run(folder, "backfill")
     print(f"Log folder: {folder}")
     print(f"Saved to: {where}")
+    if current and current != folder:
+        print("Changed folder: chats already open keep logging to the old one until you start a new chat.")
     print(f"This computer writes to: {folder / worklog.MACHINE}")
     print(f"Logged past chats: read {read} transcripts, wrote {wrote} day files.")
     print(repos_result)
@@ -146,7 +148,7 @@ def status(_args):
     print(f"Log folder: {root}" + ("" if root.is_dir() else "  (MISSING: is the sync drive available?)"))
     print(f"This computer: {worklog.MACHINE}")
     print(describe_settings(config.Settings(ask_cli=True)))
-    print("Change these with /config, /plugin configure worklog@worklog, or /worklog:repos.\n")
+    print("Change these with /config, /plugin configure worklog@sanchitarora802, or /worklog:repos.\n")
     if not root.is_dir():
         return
     for machine in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")):

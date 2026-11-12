@@ -28,7 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import platforms  # noqa: E402
 
-PLUGIN_ID = "worklog@worklog"
+PLUGIN_ID = "worklog@sanchitarora802"
 DEFAULTS = {"log_dir": "", "logging_enabled": True, "keep_days": 0, "backfill_from": ""}
 FOLDER_NOTE = (
     "Pick a folder that syncs between your own computers (iCloud Drive, Google Drive, Dropbox, "
@@ -43,11 +43,16 @@ def machine_name():
     return platforms.machine_name()
 
 
+def claude_home():
+    # Claude Code's own folder: ~/.claude, unless moved with CLAUDE_CONFIG_DIR.
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude").expanduser()
+
+
 def data_dir():
     explicit = os.environ.get("WORKLOG_STATE_DIR") or os.environ.get("CLAUDE_PLUGIN_DATA")
     if explicit:
         return Path(explicit).expanduser()
-    return Path.home() / ".claude" / "plugins" / "data" / PLUGIN_ID.replace("@", "-")
+    return claude_home() / "plugins" / "data" / PLUGIN_ID.replace("@", "-")
 
 
 def claude_cli():
@@ -83,9 +88,11 @@ def saved_options():
                 out = subprocess.run([cli, "plugin", "configure", PLUGIN_ID, "--json"], capture_output=True,
                                      text=True, timeout=20).stdout
                 tree = json.loads(out)
+                # Saved values sit under "inputs", as strings; an empty string means "not set".
+                inputs = tree.get("inputs") if isinstance(tree, dict) else None
                 for key in DEFAULTS:
-                    found = find_value(tree, key)
-                    if found is not None:
+                    found = inputs.get(key) if isinstance(inputs, dict) else find_value(tree, key)
+                    if found not in (None, ""):
                         _cli_values[key] = found
             except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
                 pass

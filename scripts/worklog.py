@@ -39,7 +39,7 @@ import platforms  # noqa: E402
 
 MACHINE = config.machine_name()
 LOG_DIR = DAYS_DIR = OFFSETS_FILE = LOCK_FILE = None
-PROJECTS_DIR = Path.home() / ".claude" / "projects"
+PROJECTS_DIR = config.claude_home() / "projects"
 
 
 def use_folders(log_root):
