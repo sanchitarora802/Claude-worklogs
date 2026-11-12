@@ -13,6 +13,10 @@
 #                    system has no way to show a dialog (then setup asks for a typed path).
 #   choose_many()    a tick-box list (used for "repos not to log"), with the same per-system tools.
 #                    Returns the ticked items, None when cancelled, or raises NoPicker.
+#   pick_dates()     a calendar to choose a day or a range of days (used by /worklog:summarise): an
+#                    NSDatePicker on macOS and a MonthCalendar on Windows (drag or Shift-click for a
+#                    range), zenity/kdialog on Linux (a "from" then a "to" calendar), typed dates in tkinter.
+#                    Returns (first, last) dates, None when cancelled, or raises NoPicker.
 #
 # Only the macOS paths have been run; Windows and Linux are written to their documented APIs
 # but untested.
@@ -24,6 +28,7 @@ import socket
 import subprocess
 import sys
 import webbrowser
+from datetime import date, datetime
 from pathlib import Path
 
 SYSTEM = platform.system()  # "Darwin", "Windows" or "Linux"
@@ -299,6 +304,149 @@ def _tk_list(title, prompt, items, ticked):
     tkinter.Button(buttons, text="Cancel", command=root.destroy).pack(side="right", padx=6)
     root.mainloop()
     return result["value"]
+
+
+def pick_dates(title, prompt, initial):
+    pickers = {"Darwin": [_mac_date], "Windows": [_windows_date], "Linux": [_zenity_date, _kdialog_date]}
+    for picker in pickers.get(SYSTEM, []) + [_tk_date]:
+        result = picker(title, prompt, initial)
+        if result != "unavailable":
+            return result
+    raise NoPicker()
+
+
+def _as_date(text):
+    try:
+        return date.fromisoformat(text.strip())
+    except ValueError:
+        return None
+
+
+def _as_range(text):
+    # "2026-11-01" or "2026-11-01 2026-11-07" (also with ".." or "to" between) -> (first, last)
+    parts = [_as_date(p) for p in text.replace("..", " ").replace(" to ", " ").split()]
+    if not parts or None in parts or len(parts) > 2:
+        return None
+    return min(parts), max(parts)
+
+
+def _two_calendars(one):
+    # For tools that pick one day at a time: a "from" calendar, then a "to" calendar.
+    first = one("From which day?")
+    if not isinstance(first, date):
+        return first
+    last = one("To which day? (pick the same day for just that day)", first)
+    if not isinstance(last, date):
+        return last if last == "unavailable" else None
+    return min(first, last), max(first, last)
+
+
+_MAC_DATE_SCRIPT = """
+ObjC.import('Cocoa');
+function run(argv) {
+  var app = $.NSApplication.sharedApplication;
+  app.setActivationPolicy(1);  // accessory: a window without a Dock icon
+  var picker = $.NSDatePicker.alloc.initWithFrame($.NSMakeRect(0, 0, 280, 160));
+  picker.datePickerStyle = 1;          // calendar
+  picker.datePickerElements = 0x00e0;  // year, month, day
+  picker.datePickerMode = 1;           // range: drag or Shift-click
+  picker.dateValue = $.NSDate.dateWithTimeIntervalSince1970(Number(argv[2]));
+  picker.maxDate = $.NSDate.date;
+  picker.sizeToFit;
+  var alert = $.NSAlert.alloc.init;
+  alert.messageText = argv[0];
+  alert.informativeText = argv[1];
+  alert.addButtonWithTitle('Summarise');
+  alert.addButtonWithTitle('Cancel');
+  alert.accessoryView = picker;
+  app.activateIgnoringOtherApps(true);
+  if (alert.runModal != 1000) return 'CANCEL';
+  var format = $.NSDateFormatter.alloc.init;
+  format.dateFormat = 'yyyy-MM-dd';
+  var last = picker.dateValue.dateByAddingTimeInterval(picker.timeInterval);
+  return ObjC.unwrap(format.stringFromDate(picker.dateValue)) + ' ' + ObjC.unwrap(format.stringFromDate(last));
+}
+"""
+
+
+def _mac_date(title, prompt, initial):
+    noon = datetime(initial.year, initial.month, initial.day, 12).timestamp()
+    code, out = _run(["osascript", "-l", "JavaScript", "-e", _MAC_DATE_SCRIPT, title, prompt, str(int(noon))])
+    if code is None or (code != 0 and not out):
+        return "unavailable"
+    return _as_range(out)
+
+
+_WINDOWS_DATE_SCRIPT = r"""
+Add-Type -AssemblyName System.Windows.Forms
+$form = New-Object System.Windows.Forms.Form
+$form.Text = $env:WORKLOG_TITLE; $form.AutoSize = $true; $form.StartPosition = 'CenterScreen'
+$label = New-Object System.Windows.Forms.Label
+$label.Text = $env:WORKLOG_PROMPT; $label.AutoSize = $true; $label.Dock = 'Top'
+$calendar = New-Object System.Windows.Forms.MonthCalendar
+$calendar.MaxSelectionCount = 31; $calendar.MaxDate = [DateTime]::Today; $calendar.Dock = 'Top'
+$calendar.SetDate([DateTime]::ParseExact($env:WORKLOG_START, 'yyyy-MM-dd', $null))
+$panel = New-Object System.Windows.Forms.FlowLayoutPanel
+$panel.Dock = 'Bottom'; $panel.AutoSize = $true; $panel.FlowDirection = 'RightToLeft'
+$ok = New-Object System.Windows.Forms.Button; $ok.Text = 'Summarise'; $ok.DialogResult = 'OK'
+$cancel = New-Object System.Windows.Forms.Button; $cancel.Text = 'Cancel'; $cancel.DialogResult = 'Cancel'
+$panel.Controls.AddRange(@($ok, $cancel)); $form.AcceptButton = $ok; $form.CancelButton = $cancel
+$form.Controls.AddRange(@($panel, $calendar, $label))
+if ($form.ShowDialog() -ne 'OK') { exit 1 }
+Write-Output ($calendar.SelectionStart.ToString('yyyy-MM-dd') + ' ' + $calendar.SelectionEnd.ToString('yyyy-MM-dd'))
+"""
+
+
+def _windows_date(title, prompt, initial):
+    shell = shutil.which("powershell") or shutil.which("pwsh")
+    if not shell:
+        return "unavailable"
+    env = dict(os.environ, WORKLOG_TITLE=title, WORKLOG_PROMPT=prompt, WORKLOG_START=initial.isoformat())
+    code, out = _run([shell, "-NoProfile", "-STA", "-Command", _WINDOWS_DATE_SCRIPT], env=env)
+    if code is None:
+        return "unavailable"
+    return _as_range(out) if code == 0 else None
+
+
+def _zenity_date(title, prompt, initial):
+    if not (_has_display() and shutil.which("zenity")):
+        return "unavailable"
+
+    def one(question, start=initial):
+        code, out = _run(["zenity", "--calendar", f"--title={title}", f"--text={question}",
+                          "--date-format=%Y-%m-%d", f"--day={start.day}", f"--month={start.month}",
+                          f"--year={start.year}"])
+        return _as_date(out) if code == 0 else None
+    return _two_calendars(one)
+
+
+def _kdialog_date(title, prompt, initial):
+    if not (_has_display() and shutil.which("kdialog")):
+        return "unavailable"
+
+    def one(question, start=initial):
+        code, out = _run(["kdialog", "--title", title, "--dateformat", "yyyy-MM-dd", "--calendar", question])
+        return _as_date(out) if code == 0 else None
+    return _two_calendars(one)
+
+
+def _tk_date(title, prompt, initial):
+    # tkinter has no calendar widget, so this asks for the date as text.
+    if SYSTEM == "Linux" and not _has_display():
+        return "unavailable"
+    try:
+        import tkinter
+        from tkinter import simpledialog
+        root = tkinter.Tk()
+    except Exception:  # tkinter missing, or no display to open a window on
+        return "unavailable"
+    root.withdraw()
+    try:
+        text = simpledialog.askstring(title, "Day to summarise (YYYY-MM-DD), or a range (FROM..TO):",
+                                      initialvalue=initial.isoformat(), parent=root)
+        return _as_range(text) if text else None
+    finally:
+        root.destroy()
 
 
 if __name__ == "__main__":

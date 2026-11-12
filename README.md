@@ -121,8 +121,10 @@ Add your log folder to set it in the same step:
 
 Then run `/worklog:setup` to choose the log folder (if you didn't pass one) and the repos you don't
 want logged. Until a folder is set, nothing is logged, and you'll see a reminder when a chat starts.
-`/worklog:status` shows where logs are going, and `/worklog:day 2026-11-06` (or just asking "what did I
-do last Friday?") summarises a day.
+`/worklog:status` shows where logs are going. 📅 `/worklog:summarise` opens a calendar to pick a day or a range
+and summarises it from every log in the folder and its subfolders (or type it:
+`/worklog:summarise 2026-11-06` or `2026-11-01..2026-11-07`); just asking "what did I do last
+Friday?" works too.
 
 ## 📁 Choosing a log folder
 
