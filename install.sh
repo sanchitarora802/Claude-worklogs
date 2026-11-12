@@ -15,8 +15,10 @@
 # Claude Code loads plugins when a chat starts: afterwards, run /reload-plugins or open a new chat.
 set -e
 
-REPO="sanchitarora802/Claude-worklogs"
-PLUGIN="worklog@sanchitarora802"
+REPO="${WORKLOG_SOURCE:-sanchitarora802/Claude-worklogs}"
+MARKET="sanchitarora802"
+PLUGIN="worklog@$MARKET"
+OLD_MARKET="worklog"   # this repo's marketplace name before 0.4.1
 
 find_claude() {
   if command -v claude >/dev/null 2>&1; then command -v claude; return; fi
@@ -37,9 +39,17 @@ claude=$(find_claude) || {
 }
 echo "Using Claude Code at: $claude"
 
-if "$claude" plugin marketplace list 2>/dev/null | grep -q "$REPO"; then
+# Before 0.4.1 the marketplace was called "worklog" (plugin worklog@worklog). Remove that copy first:
+# it points at the same repo, so the new name can't be added beside it, and two copies would log twice.
+if "$claude" plugin marketplace list 2>/dev/null | grep -qx "  ❯ $OLD_MARKET"; then
+  echo "Removing the old worklog@worklog install..."
+  "$claude" plugin uninstall "worklog@$OLD_MARKET" </dev/null >/dev/null 2>&1 || true
+  "$claude" plugin marketplace remove "$OLD_MARKET" </dev/null
+fi
+
+if "$claude" plugin marketplace list 2>/dev/null | grep -qx "  ❯ $MARKET"; then
   echo "Updating the worklog marketplace..."
-  "$claude" plugin marketplace update sanchitarora802
+  "$claude" plugin marketplace update "$MARKET"
 else
   echo "Adding the worklog marketplace..."
   "$claude" plugin marketplace add "$REPO"
